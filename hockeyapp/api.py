@@ -106,6 +106,22 @@ class APIRequest(object):
                                             data=data,
                                             files=files))
 
+    def _put(self, uri_parts=None, data=None, files=None):
+        """Get data from the API
+
+        :param list uri_parts: Parts of the URI to compose the URI
+        :param dict data: Optional query parameters for the POST
+        :param dict files: A dictionary of field name and open file handles
+        :rtype: list or dict
+
+        """
+        uri = self._build_uri(uri_parts) if uri_parts else self._uri
+        LOGGER.debug('Performing HTTP POST to %s', uri)
+        return self._response(requests.put(uri,
+                                            headers=self.headers,
+                                            data=data,
+                                            files=files))
+
     def _response(self, response):
         """Process the API response
 

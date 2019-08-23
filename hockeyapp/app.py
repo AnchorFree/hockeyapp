@@ -326,10 +326,35 @@ class Application(api.APIRequest):
         return self._get(uri_parts=['apps', self._app_id,
                                     'statistics'])
 
+    def new_version(self, bundle_version=None, budnel_short_version=None, notes=None):
+        validation_map = {
+            "notes": (notes, str, None),
+            "bundle_version": (bundle_version, str, None),
+            "bundle_short_version": (budnel_short_version, str, None)
+        }
+
+        data = {}
+
+        for key in validation_map:
+            val, t, valids = validation_map[key]
+            if val:
+                if type(val) is not t:
+                    ValueError('Invalid type for `%s`' % key)
+                if valids and val not in valids:
+                    ValueError('Invalid value for `%s`' % key)
+                data[key] = val
+
+        try:
+            response = self._post(uri_parts=['apps', self._app_id, 'app_versions', 'new'], data=data)
+        except api.APIError as error:
+            raise error
+
+        return response
+
     def update(self, version_id,
+               ipa_file=None, dsym_file=None,
                notes=None, notes_type=None, notify=False, status=1,
-               mandatory=None, tags=None, commit_sha=None,
-               build_server_url=None, repository_url=None):
+               mandatory=None, tags=None, ipa_file_name=None):
         """Update the status or metadata for an existing version.
 
         :param str notes: Notes for testers (optional)
@@ -345,7 +370,61 @@ class Application(api.APIRequest):
         :raises: ValueError
 
         """
-        pass
+        files = {}
+
+        if ipa_file:
+            if not os.path.exists(ipa_file):
+                raise ValueError('File not found: %s' % ipa_file)
+            ipa = open(ipa_file, 'rb')
+            if ipa_file_name is None:
+                ipa_file_name = os.path.split(ipa_file)[1]
+
+            files["ipa"] = (ipa_file_name, ipa)
+
+        if dsym_file:
+            if not os.path.exists(dsym_file):
+                raise ValueError('File not found: %s' % dsym_file)
+            dsym_file_name = os.path.split(dsym_file)[1]
+            if "dSYM" in dsym_file and os.path.isdir(dsym_file):
+                dsym_zip = tempfile.NamedTemporaryFile(delete=False)
+                z = zipfile.ZipFile(dsym_zip, 'w')
+                rootlen = len(os.path.split(dsym_file)[0]) + 1
+                for base, dirs, list_files in os.walk(dsym_file):
+                    for f in list_files:
+                        fn = os.path.join(base, f)
+                        z.write(fn, fn[rootlen:])
+                z.close()
+                dsym_zip.seek(0)
+                files["dsym"] = (dsym_file_name + '.zip', dsym_zip)
+            else:
+                files["dsym"] = (dsym_file_name, dsym_file)
+
+        data = {}
+
+        validation_map = {
+            "notes": (notes, str, None),
+            "notes_type": (notes_type, int, [0, 1]),
+            "notify": (notify, int, [0, 1]),
+            "status": (status, int, [1, 2]),
+            "mandatory": (mandatory, int, [0, 1]),
+            "tags": (tags, list, None)
+        }
+
+        for key in validation_map:
+            val, t, valids = validation_map[key]
+            if val:
+                if type(val) is not t:
+                    ValueError('Invalid type for `%s`' % key)
+                if valids and val not in valids:
+                    ValueError('Invalid value for `%s`' % key)
+                data[key] = val
+
+        try:
+            response = self._put(uri_parts=['apps', self._app_id, 'app_versions', str(version_id)], data=data, files=files)
+        except api.APIError as error:
+            raise error
+
+        return response
 
     def upload(self, ipa_file=None, dsym_file=None,
                notes=None, notes_type=None, notify=False, status=1,
